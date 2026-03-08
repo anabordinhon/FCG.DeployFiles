@@ -1,0 +1,103 @@
+name: fcg-prod
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: fcg-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - fcg-network
+    restart: unless-stopped
+
+  usersapi-migration:
+    image: daiana2026dev/user-api-image:migrations
+    container_name: fcg-users-migration
+    env_file: .env
+    environment:
+      ConnectionStrings__DefaultConnection: ${USERS_DB_CONNECTION_STRING}
+    networks:
+      - fcg-network
+    restart: "no"
+
+  usersapi:
+    image: daiana2026dev/user-api-image:latest
+    container_name: fcg-users-api
+    env_file: .env
+    environment:
+      ConnectionStrings__DefaultConnection: ${USERS_DB_CONNECTION_STRING}
+      AWS__SQS__QueueUrl: ${AWS_SQS_QUEUE_URL}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN}
+      AWS_DEFAULT_REGION: us-east-1
+    ports:
+      - "8081:8080"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      usersapi-migration:
+        condition: service_completed_successfully
+    networks:
+      - fcg-network
+    restart: unless-stopped
+
+  catalogapi-migration:
+    image: daiana2026dev/catalog-api-image:migrations
+    container_name: fcg-catalog-migration
+    env_file: .env
+    environment:
+      ConnectionStrings__DefaultConnection: ${CATALOG_DB_CONNECTION_STRING}
+    networks:
+      - fcg-network
+    restart: "no"
+
+  catalogapi:
+    image: daiana2026dev/catalog-api-image:latest
+    container_name: fcg-catalog-api
+    env_file: .env
+    environment:
+      ConnectionStrings__DefaultConnection: ${CATALOG_DB_CONNECTION_STRING}
+    ports:
+      - "8082:8080"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      catalogapi-migration:
+        condition: service_completed_successfully
+    networks:
+      - fcg-network
+    restart: unless-stopped
+
+  payments-worker:
+    image: daiana2026dev/payments-worker-image:latest
+    container_name: fcg-payments-worker
+    env_file: .env
+    environment:
+      RabbitMQ__Host: fcg-rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_DEFAULT_USER}
+      RabbitMQ__Password: ${RABBITMQ_DEFAULT_PASS}
+      AWS__SQS__QueueUrl: ${AWS_SQS_QUEUE_URL}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN}
+      AWS_DEFAULT_REGION: us-east-1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - fcg-network
+    restart: unless-stopped
+
+networks:
+  fcg-network:
+    driver: bridge
