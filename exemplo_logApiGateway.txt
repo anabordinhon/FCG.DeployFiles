@@ -1,0 +1,75 @@
+~ $ sed -i 's/\r//' subir_gateway.sh && ./subir_gateway.sh
+=================================================
+  API Gateway - UserApi + CatalogApi
+=================================================
+
+[1/6] Buscando IP da instância 'machineOne'...
+[OK] EC2 IP: 54.175.138.236
+     fcg-users-api   → http://54.175.138.236:8081
+     fcg-catalog-api → http://54.175.138.236:8082
+
+[2/6] Restringindo Security Group 'secgroup-microservicos-rabbit'...
+[OK] SG encontrado: sg-0036683b33f5e3392
+     Removendo 0.0.0.0/0 da porta 8081... removido ✅
+     CIDRs do API Gateway adicionados na porta 8081 ✅
+     Removendo 0.0.0.0/0 da porta 8082... removido ✅
+     CIDRs do API Gateway adicionados na porta 8082 ✅
+
+[3/6] Criando HTTP API Gateway 'microservicos-gateway'...
+[OK] Gateway criado (ID: 3u4o36x4hc)
+
+[4/6] Criando integrações...
+[OK] Integração fcg-users-api criada (ID: ao7zmcn)
+[OK] Integração fcg-catalog-api criada (ID: l09l29k)
+
+[5/6] Criando rotas...
+[OK] Rotas fcg-users-api (porta 8081):
+     ANY /users/{proxy+}
+[OK] Rotas fcg-catalog-api (porta 8082):
+     ANY /catalog/{proxy+}
+
+[6/6] Criando stage 'prod'...
+[OK] Stage 'prod' criado com auto-deploy e throttling
+
+=================================================
+✅ GATEWAY CRIADO COM SUCESSO!
+=================================================
+
+  URL Base: https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod
+
+  📬 fcg-users-api (porta 8081)
+  Prefixo no gateway: /users  →  backend recebe: /api/...
+
+    POST   https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/users/api/auth/login
+    GET    https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/users/api/users
+    GET    https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/users/api/users/{publicId}
+    POST   https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/users/api/users
+    PATCH  https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/users/api/users/{publicId}/deactivate
+
+  📬 fcg-catalog-api (porta 8082)
+  Prefixo no gateway: /catalog  →  backend recebe: /api/...
+
+    GET    https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/catalog/api/games
+    GET    https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/catalog/api/games/{publicId}
+    POST   https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/catalog/api/games
+    GET    https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/catalog/api/promotions
+    GET    https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/catalog/api/promotions/{publicId}
+    POST   https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/catalog/api/promotions
+    GET    https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/catalog/api/gamepurchase
+    POST   https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/catalog/api/gamepurchase
+
+  🔒 Segurança:
+    ✅ Porta 8081 restrita aos CIDRs do API Gateway
+    ✅ Porta 8082 restrita aos CIDRs do API Gateway
+    ✅ Throttling: 100 req/s (burst 200)
+    ✅ CORS configurado
+
+  ⚠️  Para reverter restrições do SG (emergência):
+    aws ec2 authorize-security-group-ingress \
+      --group-id sg-0036683b33f5e3392 --protocol tcp --port 8081 --cidr 0.0.0.0/0
+    aws ec2 authorize-security-group-ingress \
+      --group-id sg-0036683b33f5e3392 --protocol tcp --port 8082 --cidr 0.0.0.0/0
+
+  🗑️  Para deletar o gateway:
+    aws apigatewayv2 delete-api --api-id 3u4o36x4hc
+=================================================

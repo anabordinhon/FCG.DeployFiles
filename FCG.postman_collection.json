@@ -1,0 +1,623 @@
+{
+  "info": {
+    "_postman_id": "14514c07-932e-4b42-8e8d-eb4e53acafbc",
+    "name": "FCG - Fiap Cloud Games",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "53094065",
+    "_collection_link": "https://go.postman.co/collection/53094065-14514c07-932e-4b42-8e8d-eb4e53acafbc?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.token) {",
+                  "    pm.collectionVariables.set('token', json.data.token);",
+                  "    console.log('Token salvo automaticamente!');",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@admin.com\",\n  \"password\": \"SenhaAdmin123!\"\n}"
+            },
+            "url": {
+              "raw": "https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/users/api/auth/login",
+              "protocol": "https",
+              "host": [
+                "3u4o36x4hc",
+                "execute-api",
+                "us-east-1",
+                "amazonaws",
+                "com"
+              ],
+              "path": [
+                "prod",
+                "users",
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Criar Usuário",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwicm9sZSI6IkFkbWluIiwibmJmIjoxNzczNDUzNDQ2LCJleHAiOjE3NzM0ODIyNDYsImlhdCI6MTc3MzQ1MzQ0Nn0.Zfq7KrfVbs4ciZ_Nsn9va6DMOEPESUWmDu-Kpi6AMFg",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"teste ana clara 900\",\n  \"email\": \"abordinhon900@fcg.com.br\",\n  \"nick\": \"abordinhon900\",\n  \"password\": \"123Aa321!\",\n  \"role\": 0\n}"
+            },
+            "url": {
+              "raw": "https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/users/api/Users",
+              "protocol": "https",
+              "host": [
+                "3u4o36x4hc",
+                "execute-api",
+                "us-east-1",
+                "amazonaws",
+                "com"
+              ],
+              "path": [
+                "prod",
+                "users",
+                "api",
+                "Users"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Usuários (Paginado)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwicm9sZSI6IkFkbWluIiwibmJmIjoxNzczNDUzNDQ2LCJleHAiOjE3NzM0ODIyNDYsImlhdCI6MTc3MzQ1MzQ0Nn0.Zfq7KrfVbs4ciZ_Nsn9va6DMOEPESUWmDu-Kpi6AMFg",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/users/api/users?page=1&pageSize=10",
+              "protocol": "https",
+              "host": [
+                "3u4o36x4hc",
+                "execute-api",
+                "us-east-1",
+                "amazonaws",
+                "com"
+              ],
+              "path": [
+                "prod",
+                "users",
+                "api",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Usuário por ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwicm9sZSI6IkFkbWluIiwibmJmIjoxNzczNDUzNDQ2LCJleHAiOjE3NzM0ODIyNDYsImlhdCI6MTc3MzQ1MzQ0Nn0.Zfq7KrfVbs4ciZ_Nsn9va6DMOEPESUWmDu-Kpi6AMFg",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/users/api/Users/{{publicId}}",
+              "protocol": "https",
+              "host": [
+                "3u4o36x4hc",
+                "execute-api",
+                "us-east-1",
+                "amazonaws",
+                "com"
+              ],
+              "path": [
+                "prod",
+                "users",
+                "api",
+                "Users",
+                "{{publicId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Desativar Usuário",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/Users/{{publicId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "Users",
+                "{{publicId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Games",
+      "item": [
+        {
+          "name": "Listar Games",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwicm9sZSI6IkFkbWluIiwibmJmIjoxNzczNDUzNDQ2LCJleHAiOjE3NzM0ODIyNDYsImlhdCI6MTc3MzQ1MzQ0Nn0.Zfq7KrfVbs4ciZ_Nsn9va6DMOEPESUWmDu-Kpi6AMFg",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/catalog/api/games",
+              "protocol": "https",
+              "host": [
+                "3u4o36x4hc",
+                "execute-api",
+                "us-east-1",
+                "amazonaws",
+                "com"
+              ],
+              "path": [
+                "prod",
+                "catalog",
+                "api",
+                "games"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Game por ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/catalog/api/games/{{gamePublicId}}",
+              "protocol": "https",
+              "host": [
+                "3u4o36x4hc",
+                "execute-api",
+                "us-east-1",
+                "amazonaws",
+                "com"
+              ],
+              "path": [
+                "prod",
+                "catalog",
+                "api",
+                "games",
+                "{{gamePublicId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Criar Game",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwicm9sZSI6IkFkbWluIiwibmJmIjoxNzczNDUzNDQ2LCJleHAiOjE3NzM0ODIyNDYsImlhdCI6MTc3MzQ1MzQ0Nn0.Zfq7KrfVbs4ciZ_Nsn9va6DMOEPESUWmDu-Kpi6AMFg",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Skyline Racer\",\n  \"description\": \"Corridas urbanas com tunning avançado\",\n  \"genre\": \"Racing\",\n  \"releaseDate\": \"2024-09-20T00:00:00Z\",\n  \"developer\": \"TurboWorks\",\n  \"priceValue\": 149.90,\n  \"ageRatingValue\": \"10+\"\n}"
+            },
+            "url": {
+              "raw": "https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/catalog/api/games",
+              "protocol": "https",
+              "host": [
+                "3u4o36x4hc",
+                "execute-api",
+                "us-east-1",
+                "amazonaws",
+                "com"
+              ],
+              "path": [
+                "prod",
+                "catalog",
+                "api",
+                "games"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Atualizar Game",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Game Atualizado\",\n  \"description\": \"Nova descricao\",\n  \"price\": 39.90,\n  \"genre\": \"RPG\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/Games/{{gamePublicId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "Games",
+                "{{gamePublicId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deletar Game",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/Games/{{gamePublicId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "Games",
+                "{{gamePublicId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "GamePurchase",
+      "item": [
+        {
+          "name": "Comprar Game",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwicm9sZSI6IkFkbWluIiwibmJmIjoxNzczNDUzNDQ2LCJleHAiOjE3NzM0ODIyNDYsImlhdCI6MTc3MzQ1MzQ0Nn0.Zfq7KrfVbs4ciZ_Nsn9va6DMOEPESUWmDu-Kpi6AMFg",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gameId\": \"7a2d21d1-b6e0-412b-b7da-71683992b912\"\n}"
+            },
+            "url": {
+              "raw": "https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/catalog/api/gamepurchase",
+              "protocol": "https",
+              "host": [
+                "3u4o36x4hc",
+                "execute-api",
+                "us-east-1",
+                "amazonaws",
+                "com"
+              ],
+              "path": [
+                "prod",
+                "catalog",
+                "api",
+                "gamepurchase"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Consulta Compra Game",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwicm9sZSI6IkFkbWluIiwibmJmIjoxNzczNDUzNDQ2LCJleHAiOjE3NzM0ODIyNDYsImlhdCI6MTc3MzQ1MzQ0Nn0.Zfq7KrfVbs4ciZ_Nsn9va6DMOEPESUWmDu-Kpi6AMFg",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "https://3u4o36x4hc.execute-api.us-east-1.amazonaws.com/prod/catalog/api/gamepurchase",
+              "protocol": "https",
+              "host": [
+                "3u4o36x4hc",
+                "execute-api",
+                "us-east-1",
+                "amazonaws",
+                "com"
+              ],
+              "path": [
+                "prod",
+                "catalog",
+                "api",
+                "gamepurchase"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Promotions",
+      "item": [
+        {
+          "name": "Listar Promoções",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/Promotions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "Promotions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Promoção por ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/Promotions/{{promotionPublicId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "Promotions",
+                "{{promotionPublicId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Criar Promoção",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"gamePublicId\": \"{{gamePublicId}}\",\n  \"discountPercentage\": 20,\n  \"startDate\": \"2026-03-01T00:00:00\",\n  \"endDate\": \"2026-03-31T23:59:59\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/Promotions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "Promotions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deletar Promoção",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/Promotions/{{promotionPublicId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "Promotions",
+                "{{promotionPublicId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://v77czqrumj.execute-api.us-east-1.amazonaws.com/prod",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
