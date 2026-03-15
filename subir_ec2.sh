@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-# Variaveis do ambiente
 NOME_INSTANCIA="machineOne"
 NOME_CHAVE="machinePen"
 NOME_SG="secgroup-microservicos-rabbit"
@@ -19,7 +18,6 @@ else
         --key-name "$NOME_CHAVE" \
         --query 'KeyMaterial' \
         --output text > "${NOME_CHAVE}.pem"
-
     chmod 400 "${NOME_CHAVE}.pem"
     echo "[OK] Chave salva como ${NOME_CHAVE}.pem na pasta atual."
 fi
@@ -39,7 +37,6 @@ else
         --description "Permite SSH, APIs e RabbitMQ para testes" \
         --query 'GroupId' \
         --output text)
-
     echo "[OK] Security Group criado (ID: $SG_ID)."
 fi
 
@@ -86,7 +83,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 # Atualiza pacotes base
 apt-get update -y
-apt-get install -y ca-certificates curl gnupg lsb-release
+apt-get install -y ca-certificates curl gnupg lsb-release wget
 
 # Adiciona repositorio oficial do Docker
 install -m 0755 -d /etc/apt/keyrings
@@ -121,11 +118,60 @@ chown -R ubuntu:ubuntu /home/ubuntu
 # Informacao util no boot
 docker --version > /home/ubuntu/docker-version.txt 2>/dev/null || true
 docker compose version > /home/ubuntu/docker-compose-version.txt 2>/dev/null || true
+
+# ── CloudWatch Agent ──────────────────────────────────────────────────────────
+echo "Instalando CloudWatch Agent..."
+
+wget -q https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
+dpkg -i amazon-cloudwatch-agent.deb
+
+# Usa tee para evitar problema de heredoc aninhado
+tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /dev/null << 'CWCONFIG'
+{
+  "traces": {
+    "traces_collected": {
+      "otlp": {
+        "grpc_endpoint": "0.0.0.0:4317",
+        "http_endpoint": "0.0.0.0:4318"
+      }
+    }
+  },
+  "logs": {
+    "metrics_collected": {
+      "otlp": {
+        "grpc_endpoint": "0.0.0.0:4317",
+        "http_endpoint": "0.0.0.0:4318"
+      }
+    }
+  },
+  "metrics": {
+    "namespace": "FCG/Users",
+    "metrics_collected": {
+      "otlp": {
+        "grpc_endpoint": "0.0.0.0:4317",
+        "http_endpoint": "0.0.0.0:4318"
+      }
+    }
+  }
+}
+CWCONFIG
+
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+    -a fetch-config \
+    -m ec2 \
+    -s \
+    -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+
+systemctl enable amazon-cloudwatch-agent
+systemctl start amazon-cloudwatch-agent
+
+echo "[OK] CloudWatch Agent instalado e rodando na porta 4317."
+# ─────────────────────────────────────────────────────────────────────────────
 EOF
 
 echo "[OK] Script de inicializacao gerado."
 
-# 6. Cria a instancia EC2
+# 6. Cria a instancia EC2 com LabInstanceProfile anexado
 echo "Levantando a instancia EC2..."
 
 aws ec2 run-instances \
@@ -133,6 +179,7 @@ aws ec2 run-instances \
     --instance-type "$TIPO_INSTANCIA" \
     --key-name "$NOME_CHAVE" \
     --security-group-ids "$SG_ID" \
+    --iam-instance-profile Name=LabInstanceProfile \
     --block-device-mappings "[{\"DeviceName\":\"/dev/sda1\",\"Ebs\":{\"VolumeSize\":$TAMANHO_DISCO_GB,\"VolumeType\":\"gp3\"}}]" \
     --credit-specification CpuCredits=standard \
     --user-data file://user_data.sh \
@@ -142,7 +189,7 @@ aws ec2 run-instances \
 echo "================================================="
 echo "✅ SUCESSO! A maquina '$NOME_INSTANCIA' esta subindo."
 echo ""
-echo "Docker sera instalado automaticamente no boot da instancia."
+echo "Docker e CloudWatch Agent serao instalados automaticamente no boot."
 echo ""
 echo "Portas liberadas para teste:"
 echo "- 22    -> SSH"
