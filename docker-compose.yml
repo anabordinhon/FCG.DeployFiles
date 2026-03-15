@@ -33,7 +33,10 @@ services:
     image: daiana2026dev/user-api-image:latest
     container_name: fcg-users-api
     env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
+      AWS_EC2_METADATA_DISABLED: "true"
       ConnectionStrings__DefaultConnection: ${USERS_DB_CONNECTION_STRING}
       AWS__SQS__QueueUrl: ${AWS_SQS_QUEUE_URL}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
@@ -65,7 +68,10 @@ services:
     image: daiana2026dev/catalog-api-image:latest
     container_name: fcg-catalog-api
     env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
+      AWS_EC2_METADATA_DISABLED: "true"
       ConnectionStrings__DefaultConnection: ${CATALOG_DB_CONNECTION_STRING}
     ports:
       - "8082:8080"
@@ -82,7 +88,10 @@ services:
     image: daiana2026dev/payments-worker-image:latest
     container_name: fcg-payments-worker
     env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
+      AWS_EC2_METADATA_DISABLED: "true"
       RabbitMQ__Host: fcg-rabbitmq
       RabbitMQ__Username: ${RABBITMQ_DEFAULT_USER}
       RabbitMQ__Password: ${RABBITMQ_DEFAULT_PASS}
