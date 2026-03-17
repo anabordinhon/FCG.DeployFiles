@@ -97,7 +97,10 @@ Após o deploy, confirme em **Lambda → fcg-email-lambda → Configuration → 
 ```json
 {
   "Records": [
-    { "body": "{\"Type\": \"payment\"}" }
+    {
+      "body": "{\"Type\":\"welcome\"}",
+      "messageAttributes": {}
+    }
   ]
 }
 ```
