@@ -4,8 +4,8 @@ set -euo pipefail
 NOME_INSTANCIA="machineOne"
 NOME_CHAVE="machinePen"
 NOME_SG="secgroup-microservicos-rabbit"
-TIPO_INSTANCIA="t3.micro"
-TAMANHO_DISCO_GB=8
+TIPO_INSTANCIA="t3.small"
+TAMANHO_DISCO_GB=20
 
 echo "Iniciando o provisionamento da instancia $NOME_INSTANCIA..."
 
