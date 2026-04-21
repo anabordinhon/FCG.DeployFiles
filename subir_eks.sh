@@ -1,0 +1,238 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CLUSTER_NAME="${CLUSTER_NAME:-fcg-eks}"
+AWS_REGION="${AWS_REGION:-us-east-1}"
+K8S_VERSION="${K8S_VERSION:-1.32}"
+
+NODEGROUP_NAME="${NODEGROUP_NAME:-fcg-nodes}"
+NODE_TYPE="${NODE_TYPE:-t3.medium}"
+NODES_DESIRED="${NODES_DESIRED:-2}"
+NODES_MIN="${NODES_MIN:-1}"
+NODES_MAX="${NODES_MAX:-2}"
+DISK_SIZE="${DISK_SIZE:-20}"
+AMI_TYPE="${AMI_TYPE:-AL2023_x86_64_STANDARD}"
+
+CLUSTER_ROLE_NAME="${CLUSTER_ROLE_NAME:-LabRole}"
+NODE_ROLE_NAME="${NODE_ROLE_NAME:-LabRole}"
+
+log() {
+  echo ""
+  echo "==> $1"
+}
+
+fail() {
+  echo "ERRO: $1" >&2
+  exit 1
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || fail "Comando obrigatório não encontrado: $1"
+}
+
+aws_cli() {
+  aws --no-cli-pager "$@"
+}
+
+ensure_local_bin() {
+  mkdir -p "$HOME/bin"
+  case ":$PATH:" in
+    *":$HOME/bin:"*) ;;
+    *) export PATH="$HOME/bin:$PATH" ;;
+  esac
+}
+
+install_kubectl() {
+  if command -v kubectl >/dev/null 2>&1; then
+    log "kubectl já está instalado: $(command -v kubectl)"
+    return
+  fi
+
+  log "Instalando kubectl..."
+  ensure_local_bin
+
+  ARCH="$(uname -m)"
+  case "$ARCH" in
+    x86_64) K8S_ARCH="amd64" ;;
+    aarch64|arm64) K8S_ARCH="arm64" ;;
+    *) fail "Arquitetura não suportada para kubectl: $ARCH" ;;
+  esac
+
+  KUBECTL_VERSION="$(curl -fsSL "https://dl.k8s.io/release/stable-${K8S_VERSION}.txt" || true)"
+  if [ -z "${KUBECTL_VERSION:-}" ]; then
+    KUBECTL_VERSION="$(curl -fsSL "https://dl.k8s.io/release/stable.txt")"
+  fi
+
+  curl -fsSL -o "$HOME/bin/kubectl" "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${K8S_ARCH}/kubectl"
+  chmod +x "$HOME/bin/kubectl"
+
+  require_cmd kubectl
+  log "kubectl instalado com sucesso em $HOME/bin/kubectl"
+}
+
+check_aws_identity() {
+  log "Validando credenciais AWS..."
+  aws_cli sts get-caller-identity >/dev/null || fail "AWS CLI sem credenciais válidas no ambiente"
+  aws_cli sts get-caller-identity
+}
+
+resolve_cluster_role_arn() {
+  log "Resolvendo Cluster Role..."
+  CLUSTER_ROLE_ARN="$(aws_cli iam get-role \
+    --role-name "$CLUSTER_ROLE_NAME" \
+    --query 'Role.Arn' \
+    --output text)" || fail "Não encontrei a role do cluster: $CLUSTER_ROLE_NAME"
+
+  [ -n "$CLUSTER_ROLE_ARN" ] && [ "$CLUSTER_ROLE_ARN" != "None" ] || fail "Role do cluster inválida: $CLUSTER_ROLE_NAME"
+
+  log "Cluster Role ARN: $CLUSTER_ROLE_ARN"
+}
+
+resolve_node_role_arn() {
+  log "Resolvendo Node Role..."
+  NODE_ROLE_ARN="$(aws_cli iam get-role \
+    --role-name "$NODE_ROLE_NAME" \
+    --query 'Role.Arn' \
+    --output text)" || fail "Não encontrei a node role: $NODE_ROLE_NAME"
+
+  [ -n "$NODE_ROLE_ARN" ] && [ "$NODE_ROLE_ARN" != "None" ] || fail "Node role inválida: $NODE_ROLE_NAME"
+
+  log "Node Role ARN: $NODE_ROLE_ARN"
+}
+
+resolve_default_vpc_and_subnets() {
+  log "Buscando VPC e subnets padrão..."
+
+  VPC_ID="$(aws_cli ec2 describe-vpcs \
+    --region "$AWS_REGION" \
+    --filters Name=isDefault,Values=true \
+    --query 'Vpcs[0].VpcId' \
+    --output text)" || fail "Erro ao buscar VPC padrão"
+
+  [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] || fail "Não encontrei VPC padrão"
+
+  mapfile -t SUBNET_ARRAY < <(
+    aws_cli ec2 describe-subnets \
+      --region "$AWS_REGION" \
+      --filters Name=vpc-id,Values="$VPC_ID" \
+      --query 'Subnets[].[SubnetId,AvailabilityZone,AvailabilityZoneId]' \
+      --output text | awk '$3 != "use1-az3" && !seen[$2]++ {print $1}' | head -n 2
+  )
+
+  [ "${#SUBNET_ARRAY[@]}" -ge 2 ] || fail "Não encontrei duas subnets válidas em AZs diferentes na VPC padrão"
+
+  SUBNET_IDS_CSV="$(IFS=,; echo "${SUBNET_ARRAY[*]}")"
+
+  log "VPC: $VPC_ID"
+  log "Subnets selecionadas: $SUBNET_IDS_CSV"
+}
+
+cluster_exists() {
+  aws_cli eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" >/dev/null 2>&1
+}
+
+nodegroup_exists() {
+  aws_cli eks describe-nodegroup \
+    --cluster-name "$CLUSTER_NAME" \
+    --nodegroup-name "$NODEGROUP_NAME" \
+    --region "$AWS_REGION" >/dev/null 2>&1
+}
+
+create_cluster_if_needed() {
+  if cluster_exists; then
+    log "Cluster EKS '$CLUSTER_NAME' já existe. Pulando criação."
+    return
+  fi
+
+  log "Criando cluster EKS '$CLUSTER_NAME'..."
+  aws_cli eks create-cluster \
+    --name "$CLUSTER_NAME" \
+    --region "$AWS_REGION" \
+    --kubernetes-version "$K8S_VERSION" \
+    --role-arn "$CLUSTER_ROLE_ARN" \
+    --resources-vpc-config "subnetIds=${SUBNET_IDS_CSV},endpointPublicAccess=true,endpointPrivateAccess=false" \
+    --output json || fail "Falha ao criar cluster EKS"
+
+  aws_cli eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" >/dev/null 2>&1 || fail "O create-cluster terminou, mas o cluster não apareceu. Verifique permissões/quota do laboratório."
+
+  log "Cluster criado. Aguardando ficar ativo..."
+  aws_cli eks wait cluster-active --name "$CLUSTER_NAME" --region "$AWS_REGION" || fail "Timeout aguardando cluster ficar ativo"
+
+  log "Status do cluster:"
+  aws_cli eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" --query 'cluster.status' --output text
+}
+
+create_nodegroup_if_needed() {
+  if nodegroup_exists; then
+    log "Nodegroup '$NODEGROUP_NAME' já existe. Pulando criação."
+    return
+  fi
+
+  log "Criando nodegroup '$NODEGROUP_NAME'..."
+  aws_cli eks create-nodegroup \
+    --cluster-name "$CLUSTER_NAME" \
+    --nodegroup-name "$NODEGROUP_NAME" \
+    --region "$AWS_REGION" \
+    --subnets "${SUBNET_ARRAY[@]}" \
+    --node-role "$NODE_ROLE_ARN" \
+    --scaling-config "minSize=${NODES_MIN},maxSize=${NODES_MAX},desiredSize=${NODES_DESIRED}" \
+    --disk-size "$DISK_SIZE" \
+    --instance-types "$NODE_TYPE" \
+    --ami-type "$AMI_TYPE" \
+    --capacity-type ON_DEMAND \
+    --output json || fail "Falha ao criar nodegroup"
+
+  log "Nodegroup criado. Aguardando ficar ativo..."
+  aws_cli eks wait nodegroup-active \
+    --cluster-name "$CLUSTER_NAME" \
+    --nodegroup-name "$NODEGROUP_NAME" \
+    --region "$AWS_REGION" || fail "Timeout aguardando nodegroup ficar ativo"
+
+  log "Status do nodegroup:"
+  aws_cli eks describe-nodegroup \
+    --cluster-name "$CLUSTER_NAME" \
+    --nodegroup-name "$NODEGROUP_NAME" \
+    --region "$AWS_REGION" \
+    --query 'nodegroup.status' \
+    --output text
+}
+
+update_kubeconfig() {
+  log "Atualizando kubeconfig..."
+  aws_cli eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION" --alias "$CLUSTER_NAME" || fail "Falha ao atualizar kubeconfig"
+}
+
+show_status() {
+  log "Contexto atual do kubectl:"
+  kubectl config current-context || true
+
+  log "Nodes do cluster:"
+  kubectl get nodes -o wide || true
+
+  log "Cluster EKS pronto para receber manifests."
+}
+
+main() {
+  export AWS_PAGER=""
+
+  ensure_local_bin
+  require_cmd aws
+  require_cmd curl
+
+  install_kubectl
+  require_cmd kubectl
+
+  check_aws_identity
+  resolve_cluster_role_arn
+  resolve_node_role_arn
+  resolve_default_vpc_and_subnets
+
+  create_cluster_if_needed
+  create_nodegroup_if_needed
+  update_kubeconfig
+  show_status
+
+  log "Provisionamento do EKS concluído com sucesso."
+}
+
+main "$@"
