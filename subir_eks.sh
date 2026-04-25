@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ==========================================
+# LER ARQUIVO .ENV AUTOMATICAMENTE
+# ==========================================
+if [ -f .env ]; then
+  echo "==> Encontrado arquivo .env. Carregando variáveis..."
+  source .env
+fi
+# ==========================================
+
 CLUSTER_NAME="${CLUSTER_NAME:-fcg-eks}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 K8S_VERSION="${K8S_VERSION:-1.32}"
