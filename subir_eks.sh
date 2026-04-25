@@ -347,6 +347,157 @@ YAML
   log "RabbitMQ disponivel em fcg-rabbitmq:5672 (interno ao cluster)."
 }
 
+
+deploy_cloudwatch_agent() {
+  log "Provisionando CloudWatch Agent DaemonSet no cluster..."
+
+  # Namespace
+  kubectl apply -f - <<YAML
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: amazon-cloudwatch
+  labels:
+    name: amazon-cloudwatch
+YAML
+
+  # ServiceAccount
+  kubectl apply -f - <<YAML
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudwatch-agent
+  namespace: amazon-cloudwatch
+YAML
+
+  # ConfigMap — mesma config do amazon-cloudwatch-agent.json do user_data.sh da EC2
+  kubectl apply -f - <<YAML
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudwatch-agent-config
+  namespace: amazon-cloudwatch
+data:
+  amazon-cloudwatch-agent.json: |
+    {
+      "traces": {
+        "traces_collected": {
+          "otlp": {
+            "grpc_endpoint": "0.0.0.0:4317",
+            "http_endpoint": "0.0.0.0:4318"
+          }
+        }
+      },
+      "logs": {
+        "metrics_collected": {
+          "otlp": {
+            "grpc_endpoint": "0.0.0.0:4317",
+            "http_endpoint": "0.0.0.0:4318"
+          }
+        }
+      },
+      "metrics": {
+        "namespace": "FCG/Payments",
+        "metrics_collected": {
+          "otlp": {
+            "grpc_endpoint": "0.0.0.0:4317",
+            "http_endpoint": "0.0.0.0:4318"
+          }
+        }
+      }
+    }
+YAML
+
+  # DaemonSet — 1 agente por node, hostPort 4317/4318 exposto no IP do node
+  kubectl apply -f - <<YAML
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cloudwatch-agent
+  namespace: amazon-cloudwatch
+  labels:
+    app: cloudwatch-agent
+spec:
+  selector:
+    matchLabels:
+      app: cloudwatch-agent
+  template:
+    metadata:
+      labels:
+        app: cloudwatch-agent
+    spec:
+      serviceAccountName: cloudwatch-agent
+      containers:
+        - name: cloudwatch-agent
+          image: amazon/cloudwatch-agent:latest
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              hostPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+              hostPort: 4318
+          env:
+            - name: AWS_REGION
+              value: "us-east-1"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cwagentconfig
+            - name: rootfs
+              mountPath: /rootfs
+              readOnly: true
+            - name: dockersock
+              mountPath: /var/run/docker.sock
+              readOnly: true
+            - name: varlibdocker
+              mountPath: /var/lib/docker
+              readOnly: true
+            - name: sys
+              mountPath: /sys
+              readOnly: true
+            - name: devdisk
+              mountPath: /dev/disk
+              readOnly: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "100Mi"
+            limits:
+              cpu: "200m"
+              memory: "200Mi"
+      volumes:
+        - name: config
+          configMap:
+            name: cloudwatch-agent-config
+            items:
+              - key: amazon-cloudwatch-agent.json
+                path: cwagentconfig.json
+        - name: rootfs
+          hostPath:
+            path: /
+        - name: dockersock
+          hostPath:
+            path: /var/run/docker.sock
+        - name: varlibdocker
+          hostPath:
+            path: /var/lib/docker
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: devdisk
+          hostPath:
+            path: /dev/disk
+      terminationGracePeriodSeconds: 60
+YAML
+
+  log "CloudWatch Agent DaemonSet aplicado. Verificando rollout..."
+  kubectl rollout status daemonset/cloudwatch-agent \
+    --namespace=amazon-cloudwatch \
+    --timeout=120s || fail "Timeout aguardando CloudWatch Agent DaemonSet"
+
+  log "CloudWatch Agent disponivel em HOST_IP:4317 em todos os nodes."
+}
+
 main() {
   export AWS_PAGER=""
 
@@ -367,6 +518,7 @@ main() {
   update_kubeconfig
   show_status
   deploy_rabbitmq
+  deploy_cloudwatch_agent
 
   log "Provisionamento do EKS concluído com sucesso."
 }
