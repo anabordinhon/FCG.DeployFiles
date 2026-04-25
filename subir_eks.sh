@@ -16,6 +16,9 @@ AMI_TYPE="${AMI_TYPE:-AL2023_x86_64_STANDARD}"
 CLUSTER_ROLE_NAME="${CLUSTER_ROLE_NAME:-LabRole}"
 NODE_ROLE_NAME="${NODE_ROLE_NAME:-LabRole}"
 
+RABBITMQ_USERNAME="${RABBITMQ_USERNAME:-}"
+RABBITMQ_PASSWORD="${RABBITMQ_PASSWORD:-}"
+
 log() {
   echo ""
   echo "==> $1"
@@ -212,6 +215,138 @@ show_status() {
   log "Cluster EKS pronto para receber manifests."
 }
 
+
+deploy_rabbitmq() {
+  log "Provisionando RabbitMQ no cluster..."
+
+  if [ -z "${RABBITMQ_USERNAME:-}" ] || [ -z "${RABBITMQ_PASSWORD:-}" ]; then
+    fail "Defina RABBITMQ_USERNAME e RABBITMQ_PASSWORD antes de executar o script."
+  fi
+
+  kubectl apply -f - <<YAML
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fcg
+YAML
+
+  kubectl create secret generic rabbitmq-secret \
+    --namespace=fcg \
+    --from-literal=username="${RABBITMQ_USERNAME}" \
+    --from-literal=password="${RABBITMQ_PASSWORD}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+  kubectl apply -f - <<YAML
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rabbitmq-pvc
+  namespace: fcg
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp2
+  resources:
+    requests:
+      storage: 5Gi
+YAML
+
+  kubectl apply -f - <<YAML
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fcg-rabbitmq
+  namespace: fcg
+  labels:
+    app: fcg-rabbitmq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fcg-rabbitmq
+  template:
+    metadata:
+      labels:
+        app: fcg-rabbitmq
+    spec:
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:3-management
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: management
+              containerPort: 15672
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secret
+                  key: username
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-secret
+                  key: password
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
+          livenessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "ping"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          readinessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "ping"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      volumes:
+        - name: rabbitmq-data
+          persistentVolumeClaim:
+            claimName: rabbitmq-pvc
+YAML
+
+  kubectl apply -f - <<YAML
+apiVersion: v1
+kind: Service
+metadata:
+  name: fcg-rabbitmq
+  namespace: fcg
+  labels:
+    app: fcg-rabbitmq
+spec:
+  selector:
+    app: fcg-rabbitmq
+  type: ClusterIP
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: 5672
+    - name: management
+      port: 15672
+      targetPort: 15672
+YAML
+
+  log "Aguardando RabbitMQ ficar disponivel..."
+  kubectl rollout status deployment/fcg-rabbitmq \
+    --namespace=fcg \
+    --timeout=180s || fail "Timeout aguardando RabbitMQ"
+
+  log "RabbitMQ disponivel em fcg-rabbitmq:5672 (interno ao cluster)."
+}
+
 main() {
   export AWS_PAGER=""
 
@@ -231,6 +366,7 @@ main() {
   create_nodegroup_if_needed
   update_kubeconfig
   show_status
+  deploy_rabbitmq
 
   log "Provisionamento do EKS concluído com sucesso."
 }
