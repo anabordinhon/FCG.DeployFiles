@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: amazon-cloudwatch
+  labels:
+    name: amazon-cloudwatch
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cloudwatch-agent
+  namespace: amazon-cloudwatch
+  labels:
+    app: cloudwatch-agent
+spec:
+  selector:
+    matchLabels:
+      app: cloudwatch-agent
+  template:
+    metadata:
+      labels:
+        app: cloudwatch-agent
+    spec:
+      # LabRole já tem permissões para CloudWatch/X-Ray —
+      # equivalente ao LabInstanceProfile que era atachado na EC2
+      serviceAccountName: cloudwatch-agent
+
+      containers:
+        - name: cloudwatch-agent
+          image: amazon/cloudwatch-agent:latest
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              hostPort: 4317       # expõe no IP do node — acessível via HOST_IP:4317
+            - name: otlp-http
+              containerPort: 4318
+              hostPort: 4318
+
+          env:
+            - name: AWS_REGION
+              value: "us-east-1"
+
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cwagentconfig
+            - name: rootfs
+              mountPath: /rootfs
+              readOnly: true
+            - name: dockersock
+              mountPath: /var/run/docker.sock
+              readOnly: true
+            - name: varlibdocker
+              mountPath: /var/lib/docker
+              readOnly: true
+            - name: sys
+              mountPath: /sys
+              readOnly: true
+            - name: devdisk
+              mountPath: /dev/disk
+              readOnly: true
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "100Mi"
+            limits:
+              cpu: "200m"
+              memory: "200Mi"
+
+      volumes:
+        - name: config
+          configMap:
+            name: cloudwatch-agent-config
+            items:
+              - key: amazon-cloudwatch-agent.json
+                path: cwagentconfig.json
+        - name: rootfs
+          hostPath:
+            path: /
+        - name: dockersock
+          hostPath:
+            path: /var/run/docker.sock
+        - name: varlibdocker
+          hostPath:
+            path: /var/lib/docker
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: devdisk
+          hostPath:
+            path: /dev/disk
+
+      terminationGracePeriodSeconds: 60
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudwatch-agent
+  namespace: amazon-cloudwatch
+  # LabRole via IAM — no Lab o node já tem permissões via LabInstanceProfile,
+  # então não é necessário anotar com role ARN

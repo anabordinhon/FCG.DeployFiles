@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudwatch-agent-config
+  namespace: amazon-cloudwatch
+data:
+  # Configuração idêntica ao amazon-cloudwatch-agent.json que era instalado
+  # no user_data.sh da EC2 — aceita OTLP gRPC na 4317 e HTTP na 4318
+  amazon-cloudwatch-agent.json: |
+    {
+      "traces": {
+        "traces_collected": {
+          "otlp": {
+            "grpc_endpoint": "0.0.0.0:4317",
+            "http_endpoint": "0.0.0.0:4318"
+          }
+        }
+      },
+      "logs": {
+        "metrics_collected": {
+          "otlp": {
+            "grpc_endpoint": "0.0.0.0:4317",
+            "http_endpoint": "0.0.0.0:4318"
+          }
+        }
+      },
+      "metrics": {
+        "namespace": "FCG/Payments",
+        "metrics_collected": {
+          "otlp": {
+            "grpc_endpoint": "0.0.0.0:4317",
+            "http_endpoint": "0.0.0.0:4318"
+          }
+        }
+      }
+    }
