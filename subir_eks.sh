@@ -214,6 +214,24 @@ update_kubeconfig() {
   aws_cli eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION" --alias "$CLUSTER_NAME" || fail "Falha ao atualizar kubeconfig"
 }
 
+# --- NOVA FUNÇÃO ---
+install_ebs_csi_driver() {
+  log "Instalando AWS EBS CSI Driver (necessário para RabbitMQ)..."
+  
+  # Cria o addon no EKS. O LabRole já costuma ter as permissões necessárias.
+  aws_cli eks create-addon \
+    --cluster-name "$CLUSTER_NAME" \
+    --addon-name aws-ebs-csi-driver \
+    --region "$AWS_REGION" || log "Aviso: O Add-on pode já estar em instalação ou já existe."
+
+  log "Aguardando o EBS CSI Driver ficar ativo..."
+  aws_cli eks wait addon-active \
+    --cluster-name "$CLUSTER_NAME" \
+    --addon-name aws-ebs-csi-driver \
+    --region "$AWS_REGION" || log "Aviso: Timeout ou erro ao aguardar o Add-on (ele pode demorar alguns minutos)."
+}
+# -------------------
+
 show_status() {
   log "Contexto atual do kubectl:"
   kubectl config current-context || true
@@ -223,7 +241,6 @@ show_status() {
 
   log "Cluster EKS pronto para receber manifests."
 }
-
 
 deploy_rabbitmq() {
   log "Provisionando RabbitMQ no cluster..."
@@ -356,7 +373,6 @@ YAML
   log "RabbitMQ disponivel em fcg-rabbitmq:5672 (interno ao cluster)."
 }
 
-
 deploy_cloudwatch_agent() {
   log "Provisionando CloudWatch Agent DaemonSet no cluster..."
 
@@ -379,7 +395,7 @@ metadata:
   namespace: amazon-cloudwatch
 YAML
 
-  # ConfigMap — mesma config do amazon-cloudwatch-agent.json do user_data.sh da EC2
+  # ConfigMap
   kubectl apply -f - <<YAML
 apiVersion: v1
 kind: ConfigMap
@@ -417,7 +433,7 @@ data:
     }
 YAML
 
-  # DaemonSet — 1 agente por node, hostPort 4317/4318 exposto no IP do node
+  # DaemonSet
   kubectl apply -f - <<YAML
 apiVersion: apps/v1
 kind: DaemonSet
@@ -525,6 +541,10 @@ main() {
   create_cluster_if_needed
   create_nodegroup_if_needed
   update_kubeconfig
+  
+  # CHAMADA DA NOVA FUNÇÃO
+  install_ebs_csi_driver
+  
   show_status
   deploy_rabbitmq
   deploy_cloudwatch_agent
