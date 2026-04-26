@@ -214,24 +214,6 @@ update_kubeconfig() {
   aws_cli eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION" --alias "$CLUSTER_NAME" || fail "Falha ao atualizar kubeconfig"
 }
 
-# --- NOVA FUNÇÃO ---
-install_ebs_csi_driver() {
-  log "Instalando AWS EBS CSI Driver (necessário para RabbitMQ)..."
-  
-  # Cria o addon no EKS. O LabRole já costuma ter as permissões necessárias.
-  aws_cli eks create-addon \
-    --cluster-name "$CLUSTER_NAME" \
-    --addon-name aws-ebs-csi-driver \
-    --region "$AWS_REGION" || log "Aviso: O Add-on pode já estar em instalação ou já existe."
-
-  log "Aguardando o EBS CSI Driver ficar ativo..."
-  aws_cli eks wait addon-active \
-    --cluster-name "$CLUSTER_NAME" \
-    --addon-name aws-ebs-csi-driver \
-    --region "$AWS_REGION" || log "Aviso: Timeout ou erro ao aguardar o Add-on (ele pode demorar alguns minutos)."
-}
-# -------------------
-
 show_status() {
   log "Contexto atual do kubectl:"
   kubectl config current-context || true
@@ -243,7 +225,7 @@ show_status() {
 }
 
 deploy_rabbitmq() {
-  log "Provisionando RabbitMQ no cluster..."
+  log "Provisionando RabbitMQ no cluster (Modo Lab/emptyDir)..."
 
   if [ -z "${RABBITMQ_USERNAME:-}" ] || [ -z "${RABBITMQ_PASSWORD:-}" ]; then
     fail "Defina RABBITMQ_USERNAME e RABBITMQ_PASSWORD antes de executar o script."
@@ -261,21 +243,6 @@ YAML
     --from-literal=username="${RABBITMQ_USERNAME}" \
     --from-literal=password="${RABBITMQ_PASSWORD}" \
     --dry-run=client -o yaml | kubectl apply -f -
-
-  kubectl apply -f - <<YAML
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: rabbitmq-pvc
-  namespace: fcg
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: gp2
-  resources:
-    requests:
-      storage: 5Gi
-YAML
 
   kubectl apply -f - <<YAML
 apiVersion: apps/v1
@@ -340,8 +307,7 @@ spec:
               memory: "512Mi"
       volumes:
         - name: rabbitmq-data
-          persistentVolumeClaim:
-            claimName: rabbitmq-pvc
+          emptyDir: {}
 YAML
 
   kubectl apply -f - <<YAML
@@ -541,9 +507,6 @@ main() {
   create_cluster_if_needed
   create_nodegroup_if_needed
   update_kubeconfig
-  
-  # CHAMADA DA NOVA FUNÇÃO
-  install_ebs_csi_driver
   
   show_status
   deploy_rabbitmq
