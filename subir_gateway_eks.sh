@@ -1,4 +1,3 @@
-cat > subir_gateway_eks.sh <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -175,4 +174,3 @@ main() {
 }
 
 main "$@"
-EOF
