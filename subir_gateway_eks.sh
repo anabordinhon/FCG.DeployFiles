@@ -142,9 +142,7 @@ main() {
     --output text)"
 
   log "Criando rotas"
-  aws_cli apigatewayv2 create-route --region "$AWS_REGION" --api-id "$GATEWAY_ID" --route-key 'ANY /users' --target "integrations/$INTEGRATION_USERS" >/dev/null
   aws_cli apigatewayv2 create-route --region "$AWS_REGION" --api-id "$GATEWAY_ID" --route-key 'ANY /users/{proxy+}' --target "integrations/$INTEGRATION_USERS" >/dev/null
-  aws_cli apigatewayv2 create-route --region "$AWS_REGION" --api-id "$GATEWAY_ID" --route-key 'ANY /catalog' --target "integrations/$INTEGRATION_CATALOG" >/dev/null
   aws_cli apigatewayv2 create-route --region "$AWS_REGION" --api-id "$GATEWAY_ID" --route-key 'ANY /catalog/{proxy+}' --target "integrations/$INTEGRATION_CATALOG" >/dev/null
 
   log "Criando stage"
