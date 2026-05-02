@@ -339,6 +339,118 @@ YAML
   log "RabbitMQ disponivel em fcg-rabbitmq:5672 (interno ao cluster)."
 }
 
+deploy_elasticsearch() {
+  log "Provisionando Elasticsearch no cluster (Modo Lab/emptyDir)..."
+
+  kubectl apply -f - <<YAML
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: fcg-elasticsearch
+  namespace: fcg
+  labels:
+    app: fcg-elasticsearch
+spec:
+  serviceName: fcg-elasticsearch
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fcg-elasticsearch
+  template:
+    metadata:
+      labels:
+        app: fcg-elasticsearch
+    spec:
+      initContainers:
+        - name: fix-map-count
+          image: busybox
+          command: ["sysctl", "-w", "vm.max_map_count=262144"]
+          securityContext:
+            privileged: true
+        - name: fix-permissions
+          image: busybox
+          command: ["sh", "-c", "chown -R 1000:1000 /usr/share/elasticsearch/data"]
+          volumeMounts:
+            - name: es-data
+              mountPath: /usr/share/elasticsearch/data
+      containers:
+        - name: elasticsearch
+          image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+          ports:
+            - name: http
+              containerPort: 9200
+            - name: transport
+              containerPort: 9300
+          env:
+            - name: discovery.type
+              value: "single-node"
+            - name: xpack.security.enabled
+              value: "false"
+            - name: ES_JAVA_OPTS
+              value: "-Xms512m -Xmx512m"
+            - name: cluster.name
+              value: "fcg-cluster"
+            - name: bootstrap.memory_lock
+              value: "false"
+          volumeMounts:
+            - name: es-data
+              mountPath: /usr/share/elasticsearch/data
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health?wait_for_status=yellow&timeout=5s
+              port: 9200
+            initialDelaySeconds: 40
+            periodSeconds: 10
+            failureThreshold: 18
+          livenessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+            initialDelaySeconds: 90
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: "300m"
+              memory: "768Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+      volumes:
+        - name: es-data
+          emptyDir: {}
+YAML
+
+  kubectl apply -f - <<YAML
+apiVersion: v1
+kind: Service
+metadata:
+  name: fcg-elasticsearch
+  namespace: fcg
+  labels:
+    app: fcg-elasticsearch
+spec:
+  selector:
+    app: fcg-elasticsearch
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9200
+      targetPort: 9200
+    - name: transport
+      port: 9300
+      targetPort: 9300
+YAML
+
+  log "Aguardando Elasticsearch ficar disponivel (pode levar ate 3 minutos)..."
+  kubectl rollout status statefulset/fcg-elasticsearch \
+    --namespace=fcg \
+    --timeout=300s || fail "Timeout aguardando Elasticsearch"
+
+  log "Elasticsearch disponivel em fcg-elasticsearch:9200 (interno ao cluster)."
+}
+
+
 deploy_cloudwatch_agent() {
   log "Provisionando CloudWatch Agent DaemonSet no cluster..."
 
@@ -510,6 +622,7 @@ main() {
   
   show_status
   deploy_rabbitmq
+  deploy_elasticsearch 
   deploy_cloudwatch_agent
 
   log "Provisionamento do EKS concluído com sucesso."
