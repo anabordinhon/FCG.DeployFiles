@@ -1,10 +1,10 @@
 {
   "info": {
-    "_postman_id": "14514c07-932e-4b42-8e8d-eb4e53acafbc",
+    "_postman_id": "4480ad20-e968-4c11-a6e5-dcfd94e916d4",
     "name": "FCG - Fiap Cloud Games",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "53094065",
-    "_collection_link": "https://go.postman.co/collection/53094065-14514c07-932e-4b42-8e8d-eb4e53acafbc?source=collection_link"
+    "_collection_link": "https://go.postman.co/collection/53094065-4480ad20-e968-4c11-a6e5-dcfd94e916d4?source=collection_link"
   },
   "item": [
     {
@@ -86,7 +86,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"teste ana clara 900\",\n  \"email\": \"abordinhon900@fcg.com.br\",\n  \"nick\": \"abordinhon900\",\n  \"password\": \"123Aa321!\",\n  \"role\": 0\n}"
+              "raw": "{\n \"publicId\": \"f8bc69f9-4ef4-4fb2-967c-4ad8ac3a43dd\",\n  \"name\": \"Ana Clara Rios Nunes Novo\",\n  \"email\": \"ariofds@fcg.com.br\",\n  \"nick\": \"ardfios\",\n  \"role\": 0\n}"
             },
             "url": {
               "raw": "{{base_url}}/users/api/Users",
@@ -116,6 +116,7 @@
               ]
             },
             "method": "GET",
+            "header": [],
             "url": {
               "raw": "{{base_url}}/users/api/users?page=1&pageSize=10",
               "host": [
@@ -154,6 +155,7 @@
               ]
             },
             "method": "GET",
+            "header": [],
             "url": {
               "raw": "{{base_url}}/users/api/Users/{{publicId}}",
               "host": [
@@ -183,6 +185,7 @@
               ]
             },
             "method": "DELETE",
+            "header": [],
             "url": {
               "raw": "{{base_url}}/api/Users/{{publicId}}",
               "host": [
@@ -216,6 +219,7 @@
               ]
             },
             "method": "GET",
+            "header": [],
             "url": {
               "raw": "{{base_url}}/catalog/api/games",
               "host": [
@@ -244,6 +248,7 @@
               ]
             },
             "method": "GET",
+            "header": [],
             "url": {
               "raw": "{{base_url}}/catalog/api/games/{{gamePublicId}}",
               "host": [
@@ -349,6 +354,7 @@
               ]
             },
             "method": "DELETE",
+            "header": [],
             "url": {
               "raw": "{{base_url}}/api/Games/{{gamePublicId}}",
               "host": [
@@ -390,7 +396,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"gameId\": \"7a2d21d1-b6e0-412b-b7da-71683992b912\"\n}"
+              "raw": "{\n  \"gameId\": \"7d611150-73af-406b-a3f7-0580fe92f573\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/catalog/api/gamepurchase",
@@ -454,6 +460,7 @@
               ]
             },
             "method": "GET",
+            "header": [],
             "url": {
               "raw": "{{base_url}}/api/Promotions",
               "host": [
@@ -481,6 +488,7 @@
               ]
             },
             "method": "GET",
+            "header": [],
             "url": {
               "raw": "{{base_url}}/api/Promotions/{{promotionPublicId}}",
               "host": [
@@ -546,6 +554,7 @@
               ]
             },
             "method": "DELETE",
+            "header": [],
             "url": {
               "raw": "{{base_url}}/api/Promotions/{{promotionPublicId}}",
               "host": [
@@ -561,18 +570,134 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "New Review",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"gameId\": \"cad51376-05bf-4a5c-996b-150a1dc91436\",\r\n  \"rating\": 1,\r\n  \"comment\": \"odiei\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/reviews/api/reviews",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reviews",
+                "api",
+                "reviews"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search Reviews By Game",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/reviews/api/reviews/game/{{gameId}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reviews",
+                "api",
+                "reviews",
+                "game",
+                "{{gameId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
     }
   ],
   "variable": [
     {
       "key": "base_url",
-      "value": "",
-      "type": "string"
+      "value": ""
     },
     {
       "key": "token",
+      "value": ""
+    },
+    {
+      "key": "gameId",
       "value": "",
-      "type": "string"
+      "type": "default"
     }
   ]
 }

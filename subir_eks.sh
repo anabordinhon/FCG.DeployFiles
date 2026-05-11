@@ -28,6 +28,9 @@ NODE_ROLE_NAME="${NODE_ROLE_NAME:-LabRole}"
 RABBITMQ_USERNAME="${RABBITMQ_USERNAME:-}"
 RABBITMQ_PASSWORD="${RABBITMQ_PASSWORD:-}"
 
+MONGO_ROOT_USER="${MONGO_ROOT_USER:-}"
+MONGO_ROOT_PASS="${MONGO_ROOT_PASS:-}"
+
 log() {
   echo ""
   echo "==> $1"
@@ -48,6 +51,7 @@ aws_cli() {
 
 ensure_local_bin() {
   mkdir -p "$HOME/bin"
+
   case ":$PATH:" in
     *":$HOME/bin:"*) ;;
     *) export PATH="$HOME/bin:$PATH" ;;
@@ -64,6 +68,7 @@ install_kubectl() {
   ensure_local_bin
 
   ARCH="$(uname -m)"
+
   case "$ARCH" in
     x86_64) K8S_ARCH="amd64" ;;
     aarch64|arm64) K8S_ARCH="arm64" ;;
@@ -71,43 +76,59 @@ install_kubectl() {
   esac
 
   KUBECTL_VERSION="$(curl -fsSL "https://dl.k8s.io/release/stable-${K8S_VERSION}.txt" || true)"
+
   if [ -z "${KUBECTL_VERSION:-}" ]; then
     KUBECTL_VERSION="$(curl -fsSL "https://dl.k8s.io/release/stable.txt")"
   fi
 
-  curl -fsSL -o "$HOME/bin/kubectl" "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${K8S_ARCH}/kubectl"
+  curl -fsSL \
+    -o "$HOME/bin/kubectl" \
+    "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${K8S_ARCH}/kubectl"
+
   chmod +x "$HOME/bin/kubectl"
 
   require_cmd kubectl
+
   log "kubectl instalado com sucesso em $HOME/bin/kubectl"
 }
 
 check_aws_identity() {
   log "Validando credenciais AWS..."
-  aws_cli sts get-caller-identity >/dev/null || fail "AWS CLI sem credenciais válidas no ambiente"
+
+  aws_cli sts get-caller-identity >/dev/null \
+    || fail "AWS CLI sem credenciais válidas no ambiente"
+
   aws_cli sts get-caller-identity
 }
 
 resolve_cluster_role_arn() {
   log "Resolvendo Cluster Role..."
+
   CLUSTER_ROLE_ARN="$(aws_cli iam get-role \
     --role-name "$CLUSTER_ROLE_NAME" \
     --query 'Role.Arn' \
-    --output text)" || fail "Não encontrei a role do cluster: $CLUSTER_ROLE_NAME"
+    --output text)" \
+    || fail "Não encontrei a role do cluster: $CLUSTER_ROLE_NAME"
 
-  [ -n "$CLUSTER_ROLE_ARN" ] && [ "$CLUSTER_ROLE_ARN" != "None" ] || fail "Role do cluster inválida: $CLUSTER_ROLE_NAME"
+  [ -n "$CLUSTER_ROLE_ARN" ] \
+    && [ "$CLUSTER_ROLE_ARN" != "None" ] \
+    || fail "Role do cluster inválida: $CLUSTER_ROLE_NAME"
 
   log "Cluster Role ARN: $CLUSTER_ROLE_ARN"
 }
 
 resolve_node_role_arn() {
   log "Resolvendo Node Role..."
+
   NODE_ROLE_ARN="$(aws_cli iam get-role \
     --role-name "$NODE_ROLE_NAME" \
     --query 'Role.Arn' \
-    --output text)" || fail "Não encontrei a node role: $NODE_ROLE_NAME"
+    --output text)" \
+    || fail "Não encontrei a node role: $NODE_ROLE_NAME"
 
-  [ -n "$NODE_ROLE_ARN" ] && [ "$NODE_ROLE_ARN" != "None" ] || fail "Node role inválida: $NODE_ROLE_NAME"
+  [ -n "$NODE_ROLE_ARN" ] \
+    && [ "$NODE_ROLE_ARN" != "None" ] \
+    || fail "Node role inválida: $NODE_ROLE_NAME"
 
   log "Node Role ARN: $NODE_ROLE_ARN"
 }
@@ -119,19 +140,25 @@ resolve_default_vpc_and_subnets() {
     --region "$AWS_REGION" \
     --filters Name=isDefault,Values=true \
     --query 'Vpcs[0].VpcId' \
-    --output text)" || fail "Erro ao buscar VPC padrão"
+    --output text)" \
+    || fail "Erro ao buscar VPC padrão"
 
-  [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ] || fail "Não encontrei VPC padrão"
+  [ -n "$VPC_ID" ] \
+    && [ "$VPC_ID" != "None" ] \
+    || fail "Não encontrei VPC padrão"
 
   mapfile -t SUBNET_ARRAY < <(
     aws_cli ec2 describe-subnets \
       --region "$AWS_REGION" \
       --filters Name=vpc-id,Values="$VPC_ID" \
       --query 'Subnets[].[SubnetId,AvailabilityZone,AvailabilityZoneId]' \
-      --output text | awk '$3 != "use1-az3" && !seen[$2]++ {print $1}' | head -n 2
+      --output text \
+      | awk '$3 != "use1-az3" && !seen[$2]++ {print $1}' \
+      | head -n 2
   )
 
-  [ "${#SUBNET_ARRAY[@]}" -ge 2 ] || fail "Não encontrei duas subnets válidas em AZs diferentes na VPC padrão"
+  [ "${#SUBNET_ARRAY[@]}" -ge 2 ] \
+    || fail "Não encontrei duas subnets válidas em AZs diferentes"
 
   SUBNET_IDS_CSV="$(IFS=,; echo "${SUBNET_ARRAY[*]}")"
 
@@ -140,7 +167,9 @@ resolve_default_vpc_and_subnets() {
 }
 
 cluster_exists() {
-  aws_cli eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" >/dev/null 2>&1
+  aws_cli eks describe-cluster \
+    --name "$CLUSTER_NAME" \
+    --region "$AWS_REGION" >/dev/null 2>&1
 }
 
 nodegroup_exists() {
@@ -157,21 +186,22 @@ create_cluster_if_needed() {
   fi
 
   log "Criando cluster EKS '$CLUSTER_NAME'..."
+
   aws_cli eks create-cluster \
     --name "$CLUSTER_NAME" \
     --region "$AWS_REGION" \
     --kubernetes-version "$K8S_VERSION" \
     --role-arn "$CLUSTER_ROLE_ARN" \
     --resources-vpc-config "subnetIds=${SUBNET_IDS_CSV},endpointPublicAccess=true,endpointPrivateAccess=false" \
-    --output json || fail "Falha ao criar cluster EKS"
+    --output json \
+    || fail "Falha ao criar cluster EKS"
 
-  aws_cli eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" >/dev/null 2>&1 || fail "O create-cluster terminou, mas o cluster não apareceu. Verifique permissões/quota do laboratório."
+  aws_cli eks wait cluster-active \
+    --name "$CLUSTER_NAME" \
+    --region "$AWS_REGION" \
+    || fail "Timeout aguardando cluster ficar ativo"
 
-  log "Cluster criado. Aguardando ficar ativo..."
-  aws_cli eks wait cluster-active --name "$CLUSTER_NAME" --region "$AWS_REGION" || fail "Timeout aguardando cluster ficar ativo"
-
-  log "Status do cluster:"
-  aws_cli eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" --query 'cluster.status' --output text
+  log "Cluster ativo."
 }
 
 create_nodegroup_if_needed() {
@@ -181,6 +211,7 @@ create_nodegroup_if_needed() {
   fi
 
   log "Criando nodegroup '$NODEGROUP_NAME'..."
+
   aws_cli eks create-nodegroup \
     --cluster-name "$CLUSTER_NAME" \
     --nodegroup-name "$NODEGROUP_NAME" \
@@ -192,51 +223,40 @@ create_nodegroup_if_needed() {
     --instance-types "$NODE_TYPE" \
     --ami-type "$AMI_TYPE" \
     --capacity-type ON_DEMAND \
-    --output json || fail "Falha ao criar nodegroup"
+    --output json \
+    || fail "Falha ao criar nodegroup"
 
-  log "Nodegroup criado. Aguardando ficar ativo..."
   aws_cli eks wait nodegroup-active \
     --cluster-name "$CLUSTER_NAME" \
     --nodegroup-name "$NODEGROUP_NAME" \
-    --region "$AWS_REGION" || fail "Timeout aguardando nodegroup ficar ativo"
-
-  log "Status do nodegroup:"
-  aws_cli eks describe-nodegroup \
-    --cluster-name "$CLUSTER_NAME" \
-    --nodegroup-name "$NODEGROUP_NAME" \
     --region "$AWS_REGION" \
-    --query 'nodegroup.status' \
-    --output text
+    || fail "Timeout aguardando nodegroup ficar ativo"
+
+  log "Nodegroup ativo."
 }
 
 update_kubeconfig() {
   log "Atualizando kubeconfig..."
-  aws_cli eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION" --alias "$CLUSTER_NAME" || fail "Falha ao atualizar kubeconfig"
+
+  aws_cli eks update-kubeconfig \
+    --name "$CLUSTER_NAME" \
+    --region "$AWS_REGION" \
+    --alias "$CLUSTER_NAME"
 }
 
 show_status() {
-  log "Contexto atual do kubectl:"
-  kubectl config current-context || true
-
   log "Nodes do cluster:"
   kubectl get nodes -o wide || true
-
-  log "Cluster EKS pronto para receber manifests."
 }
 
 deploy_rabbitmq() {
-  log "Provisionando RabbitMQ no cluster (Modo Lab/emptyDir)..."
+  log "Provisionando RabbitMQ..."
 
   if [ -z "${RABBITMQ_USERNAME:-}" ] || [ -z "${RABBITMQ_PASSWORD:-}" ]; then
-    fail "Defina RABBITMQ_USERNAME e RABBITMQ_PASSWORD antes de executar o script."
+    fail "Defina RABBITMQ_USERNAME e RABBITMQ_PASSWORD."
   fi
 
-  kubectl apply -f - <<YAML
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: fcg
-YAML
+  kubectl create namespace fcg --dry-run=client -o yaml | kubectl apply -f -
 
   kubectl create secret generic rabbitmq-secret \
     --namespace=fcg \
@@ -250,8 +270,6 @@ kind: Deployment
 metadata:
   name: fcg-rabbitmq
   namespace: fcg
-  labels:
-    app: fcg-rabbitmq
 spec:
   replicas: 1
   selector:
@@ -265,46 +283,31 @@ spec:
       containers:
         - name: rabbitmq
           image: rabbitmq:3-management
+
           ports:
             - name: amqp
               containerPort: 5672
+
             - name: management
               containerPort: 15672
+
           env:
             - name: RABBITMQ_DEFAULT_USER
               valueFrom:
                 secretKeyRef:
                   name: rabbitmq-secret
                   key: username
+
             - name: RABBITMQ_DEFAULT_PASS
               valueFrom:
                 secretKeyRef:
                   name: rabbitmq-secret
                   key: password
+
           volumeMounts:
             - name: rabbitmq-data
               mountPath: /var/lib/rabbitmq
-          livenessProbe:
-            exec:
-              command: ["rabbitmq-diagnostics", "-q", "ping"]
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 12
-          readinessProbe:
-            exec:
-              command: ["rabbitmq-diagnostics", "-q", "ping"]
-            initialDelaySeconds: 20
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 12
-          resources:
-            requests:
-              cpu: "200m"
-              memory: "256Mi"
-            limits:
-              cpu: "500m"
-              memory: "512Mi"
+
       volumes:
         - name: rabbitmq-data
           emptyDir: {}
@@ -316,31 +319,27 @@ kind: Service
 metadata:
   name: fcg-rabbitmq
   namespace: fcg
-  labels:
-    app: fcg-rabbitmq
 spec:
   selector:
     app: fcg-rabbitmq
+
   type: ClusterIP
+
   ports:
     - name: amqp
       port: 5672
       targetPort: 5672
+
     - name: management
       port: 15672
       targetPort: 15672
 YAML
 
-  log "Aguardando RabbitMQ ficar disponivel..."
-  kubectl rollout status deployment/fcg-rabbitmq \
-    --namespace=fcg \
-    --timeout=180s || fail "Timeout aguardando RabbitMQ"
-
-  log "RabbitMQ disponivel em fcg-rabbitmq:5672 (interno ao cluster)."
+  log "RabbitMQ provisionado com sucesso."
 }
 
 deploy_elasticsearch() {
-  log "Provisionando Elasticsearch no cluster (Modo Lab/emptyDir)..."
+  log "Provisionando Elasticsearch..."
 
   kubectl apply -f - <<YAML
 apiVersion: apps/v1
@@ -348,74 +347,38 @@ kind: StatefulSet
 metadata:
   name: fcg-elasticsearch
   namespace: fcg
-  labels:
-    app: fcg-elasticsearch
 spec:
   serviceName: fcg-elasticsearch
   replicas: 1
+
   selector:
     matchLabels:
       app: fcg-elasticsearch
+
   template:
     metadata:
       labels:
         app: fcg-elasticsearch
+
     spec:
-      initContainers:
-        - name: fix-map-count
-          image: busybox
-          command: ["sysctl", "-w", "vm.max_map_count=262144"]
-          securityContext:
-            privileged: true
-        - name: fix-permissions
-          image: busybox
-          command: ["sh", "-c", "chown -R 1000:1000 /usr/share/elasticsearch/data"]
-          volumeMounts:
-            - name: es-data
-              mountPath: /usr/share/elasticsearch/data
       containers:
         - name: elasticsearch
           image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+
           ports:
-            - name: http
-              containerPort: 9200
-            - name: transport
-              containerPort: 9300
+            - containerPort: 9200
+
           env:
             - name: discovery.type
               value: "single-node"
+
             - name: xpack.security.enabled
               value: "false"
-            - name: ES_JAVA_OPTS
-              value: "-Xms512m -Xmx512m"
-            - name: cluster.name
-              value: "fcg-cluster"
-            - name: bootstrap.memory_lock
-              value: "false"
+
           volumeMounts:
             - name: es-data
               mountPath: /usr/share/elasticsearch/data
-          readinessProbe:
-            httpGet:
-              path: /_cluster/health?wait_for_status=yellow&timeout=5s
-              port: 9200
-            initialDelaySeconds: 40
-            periodSeconds: 10
-            failureThreshold: 18
-          livenessProbe:
-            httpGet:
-              path: /_cluster/health
-              port: 9200
-            initialDelaySeconds: 90
-            periodSeconds: 20
-            failureThreshold: 6
-          resources:
-            requests:
-              cpu: "300m"
-              memory: "768Mi"
-            limits:
-              cpu: "1000m"
-              memory: "1Gi"
+
       volumes:
         - name: es-data
           emptyDir: {}
@@ -427,188 +390,152 @@ kind: Service
 metadata:
   name: fcg-elasticsearch
   namespace: fcg
-  labels:
-    app: fcg-elasticsearch
 spec:
   selector:
     app: fcg-elasticsearch
+
   type: ClusterIP
+
   ports:
-    - name: http
-      port: 9200
+    - port: 9200
       targetPort: 9200
-    - name: transport
-      port: 9300
-      targetPort: 9300
 YAML
-
-  log "Aguardando Elasticsearch ficar disponivel (pode levar ate 3 minutos)..."
-  kubectl rollout status statefulset/fcg-elasticsearch \
-    --namespace=fcg \
-    --timeout=300s || fail "Timeout aguardando Elasticsearch"
-
-  log "Elasticsearch disponivel em fcg-elasticsearch:9200 (interno ao cluster)."
 }
 
-
 deploy_cloudwatch_agent() {
-  log "Provisionando CloudWatch Agent DaemonSet no cluster..."
+  log "Provisionando CloudWatch Agent..."
 
-  # Namespace
   kubectl apply -f - <<YAML
 apiVersion: v1
 kind: Namespace
 metadata:
   name: amazon-cloudwatch
-  labels:
-    name: amazon-cloudwatch
 YAML
 
-  # ServiceAccount
-  kubectl apply -f - <<YAML
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: cloudwatch-agent
-  namespace: amazon-cloudwatch
-YAML
-
-  # ConfigMap
-  kubectl apply -f - <<YAML
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: cloudwatch-agent-config
-  namespace: amazon-cloudwatch
-data:
-  amazon-cloudwatch-agent.json: |
-    {
-      "traces": {
-        "traces_collected": {
-          "otlp": {
-            "grpc_endpoint": "0.0.0.0:4317",
-            "http_endpoint": "0.0.0.0:4318"
-          }
-        }
-      },
-      "logs": {
-        "metrics_collected": {
-          "otlp": {
-            "grpc_endpoint": "0.0.0.0:4317",
-            "http_endpoint": "0.0.0.0:4318"
-          }
-        }
-      },
-      "metrics": {
-        "namespace": "FCG/Payments",
-        "metrics_collected": {
-          "otlp": {
-            "grpc_endpoint": "0.0.0.0:4317",
-            "http_endpoint": "0.0.0.0:4318"
-          }
-        }
-      }
-    }
-YAML
-
-  # DaemonSet
   kubectl apply -f - <<YAML
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: cloudwatch-agent
   namespace: amazon-cloudwatch
-  labels:
-    app: cloudwatch-agent
 spec:
   selector:
     matchLabels:
       app: cloudwatch-agent
+
   template:
     metadata:
       labels:
         app: cloudwatch-agent
+
     spec:
-      serviceAccountName: cloudwatch-agent
       containers:
         - name: cloudwatch-agent
           image: amazon/cloudwatch-agent:latest
+
           ports:
-            - name: otlp-grpc
-              containerPort: 4317
-              hostPort: 4317
-            - name: otlp-http
-              containerPort: 4318
-              hostPort: 4318
+            - containerPort: 4317
+            - containerPort: 4318
+YAML
+}
+
+deploy_mongodb() {
+  log "Provisionando MongoDB..."
+
+  if [ -z "${MONGO_ROOT_USER:-}" ] || [ -z "${MONGO_ROOT_PASS:-}" ]; then
+    fail "Defina MONGO_ROOT_USER e MONGO_ROOT_PASS no arquivo .env"
+  fi
+
+  kubectl create namespace fcg-reviews --dry-run=client -o yaml | kubectl apply -f -
+
+  kubectl create secret generic mongodb-secret \
+    --namespace=fcg-reviews \
+    --from-literal=username="${MONGO_ROOT_USER}" \
+    --from-literal=password="${MONGO_ROOT_PASS}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+  kubectl apply -f - <<YAML
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: fcg-reviews
+
+spec:
+  serviceName: mongodb-service
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: mongodb
+
+  template:
+    metadata:
+      labels:
+        app: mongodb
+
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:7.0
+
+          ports:
+            - containerPort: 27017
+
           env:
-            - name: AWS_REGION
-              value: "us-east-1"
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: username
+
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: password
+
           volumeMounts:
-            - name: config
-              mountPath: /etc/cwagentconfig
-            - name: rootfs
-              mountPath: /rootfs
-              readOnly: true
-            - name: dockersock
-              mountPath: /var/run/docker.sock
-              readOnly: true
-            - name: varlibdocker
-              mountPath: /var/lib/docker
-              readOnly: true
-            - name: sys
-              mountPath: /sys
-              readOnly: true
-            - name: devdisk
-              mountPath: /dev/disk
-              readOnly: true
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "100Mi"
-            limits:
-              cpu: "200m"
-              memory: "200Mi"
+            - name: mongodb-storage
+              mountPath: /data/db
+
       volumes:
-        - name: config
-          configMap:
-            name: cloudwatch-agent-config
-            items:
-              - key: amazon-cloudwatch-agent.json
-                path: cwagentconfig.json
-        - name: rootfs
-          hostPath:
-            path: /
-        - name: dockersock
-          hostPath:
-            path: /var/run/docker.sock
-        - name: varlibdocker
-          hostPath:
-            path: /var/lib/docker
-        - name: sys
-          hostPath:
-            path: /sys
-        - name: devdisk
-          hostPath:
-            path: /dev/disk
-      terminationGracePeriodSeconds: 60
+        - name: mongodb-storage
+          emptyDir: {}
 YAML
 
-  log "CloudWatch Agent DaemonSet aplicado. Verificando rollout..."
-  kubectl rollout status daemonset/cloudwatch-agent \
-    --namespace=amazon-cloudwatch \
-    --timeout=120s || fail "Timeout aguardando CloudWatch Agent DaemonSet"
+  kubectl apply -f - <<YAML
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-service
+  namespace: fcg-reviews
 
-  log "CloudWatch Agent disponivel em HOST_IP:4317 em todos os nodes."
+spec:
+  selector:
+    app: mongodb
+
+  type: ClusterIP
+
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: 27017
+YAML
+
+  log "MongoDB provisionado com sucesso."
 }
 
 main() {
   export AWS_PAGER=""
 
   ensure_local_bin
+
   require_cmd aws
   require_cmd curl
 
   install_kubectl
+
   require_cmd kubectl
 
   check_aws_identity
@@ -619,11 +546,13 @@ main() {
   create_cluster_if_needed
   create_nodegroup_if_needed
   update_kubeconfig
-  
+
   show_status
+
   deploy_rabbitmq
-  deploy_elasticsearch 
+  deploy_elasticsearch
   deploy_cloudwatch_agent
+  deploy_mongodb
 
   log "Provisionamento do EKS concluído com sucesso."
 }

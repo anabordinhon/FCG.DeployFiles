@@ -7,8 +7,10 @@ NOME_GATEWAY="${NOME_GATEWAY:-microservicos-gateway-eks}"
 NOME_STAGE="${NOME_STAGE:-prod}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 NAMESPACE="${NAMESPACE:-fcg}"
+REVIEWS_NAMESPACE="${REVIEWS_NAMESPACE:-fcg-reviews}"
 USERS_SERVICE="${USERS_SERVICE:-usersapi-service}"
 CATALOG_SERVICE="${CATALOG_SERVICE:-catalogapi-service}"
+REVIEWS_SERVICE="${REVIEWS_SERVICE:-reviewsapi-service}"
 RECRIAR_GATEWAY="${RECRIAR_GATEWAY:-true}"
 LB_TIMEOUT_SECONDS="${LB_TIMEOUT_SECONDS:-600}"
 LB_SLEEP_SECONDS="${LB_SLEEP_SECONDS:-15}"
@@ -33,26 +35,30 @@ require_cmd() {
 
 service_exists() {
   local svc="$1"
-  kubectl get svc "$svc" -n "$NAMESPACE" >/dev/null 2>&1
+  local ns="${2:-$NAMESPACE}"
+  kubectl get svc "$svc" -n "$ns" >/dev/null 2>&1
 }
 
 service_type() {
   local svc="$1"
-  kubectl get svc "$svc" -n "$NAMESPACE" -o jsonpath='{.spec.type}'
+  local ns="${2:-$NAMESPACE}"
+  kubectl get svc "$svc" -n "$ns" -o jsonpath='{.spec.type}'
 }
 
 get_lb_hostname() {
   local svc="$1"
-  kubectl get svc "$svc" -n "$NAMESPACE" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true
+  local ns="${2:-$NAMESPACE}"
+  kubectl get svc "$svc" -n "$ns" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true
 }
 
 wait_for_lb_hostname() {
   local svc="$1"
+  local ns="${2:-$NAMESPACE}"
   local waited=0
   local hostname=""
 
   while [ "$waited" -lt "$LB_TIMEOUT_SECONDS" ]; do
-    hostname="$(get_lb_hostname "$svc")"
+    hostname="$(get_lb_hostname "$svc" "$ns")"
     if [ -n "$hostname" ]; then
       echo "$hostname"
       return 0
@@ -78,17 +84,25 @@ main() {
   [ "$(service_type "$USERS_SERVICE")" = "LoadBalancer" ] || fail "Service $USERS_SERVICE não é LoadBalancer"
   [ "$(service_type "$CATALOG_SERVICE")" = "LoadBalancer" ] || fail "Service $CATALOG_SERVICE não é LoadBalancer"
 
+  log "Validando service no namespace $REVIEWS_NAMESPACE"
+  service_exists "$REVIEWS_SERVICE" "$REVIEWS_NAMESPACE" || fail "Service não encontrado: $REVIEWS_SERVICE (namespace: $REVIEWS_NAMESPACE)"
+  [ "$(service_type "$REVIEWS_SERVICE" "$REVIEWS_NAMESPACE")" = "LoadBalancer" ] || fail "Service $REVIEWS_SERVICE não é LoadBalancer"
+
   log "Aguardando hostname do LoadBalancer de $USERS_SERVICE"
   USERS_LB="$(wait_for_lb_hostname "$USERS_SERVICE")" || fail "Não foi possível obter o hostname do service $USERS_SERVICE"
 
   log "Aguardando hostname do LoadBalancer de $CATALOG_SERVICE"
   CATALOG_LB="$(wait_for_lb_hostname "$CATALOG_SERVICE")" || fail "Não foi possível obter o hostname do service $CATALOG_SERVICE"
 
+  log "Aguardando hostname do LoadBalancer de $REVIEWS_SERVICE"
+  REVIEWS_LB="$(wait_for_lb_hostname "$REVIEWS_SERVICE" "$REVIEWS_NAMESPACE")" || fail "Não foi possível obter o hostname do service $REVIEWS_SERVICE"
+
   echo "================================================="
-  echo "  API Gateway - UserApi + CatalogApi no EKS"
+  echo "  API Gateway - UserApi + CatalogApi + ReviewsApi no EKS"
   echo "================================================="
   echo "usersapi   -> http://$USERS_LB"
   echo "catalogapi -> http://$CATALOG_LB"
+  echo "reviewsapi -> http://$REVIEWS_LB"
 
   log "Verificando gateway existente"
   GATEWAY_ID_EXISTENTE="$(aws_cli apigatewayv2 get-apis --region "$AWS_REGION" --query "Items[?Name=='$NOME_GATEWAY'].ApiId" --output text 2>/dev/null || true)"
@@ -141,9 +155,21 @@ main() {
     --query 'IntegrationId' \
     --output text)"
 
+  INTEGRATION_REVIEWS="$(aws_cli apigatewayv2 create-integration \
+    --region "$AWS_REGION" \
+    --api-id "$GATEWAY_ID" \
+    --integration-type HTTP_PROXY \
+    --integration-method ANY \
+    --integration-uri "http://${REVIEWS_LB}/{proxy}" \
+    --payload-format-version "1.0" \
+    --request-parameters '{"overwrite:path": "/$request.path.proxy"}' \
+    --query 'IntegrationId' \
+    --output text)"
+
   log "Criando rotas"
   aws_cli apigatewayv2 create-route --region "$AWS_REGION" --api-id "$GATEWAY_ID" --route-key 'ANY /users/{proxy+}' --target "integrations/$INTEGRATION_USERS" >/dev/null
   aws_cli apigatewayv2 create-route --region "$AWS_REGION" --api-id "$GATEWAY_ID" --route-key 'ANY /catalog/{proxy+}' --target "integrations/$INTEGRATION_CATALOG" >/dev/null
+  aws_cli apigatewayv2 create-route --region "$AWS_REGION" --api-id "$GATEWAY_ID" --route-key 'ANY /reviews/{proxy+}' --target "integrations/$INTEGRATION_REVIEWS" >/dev/null
 
   log "Criando stage"
   aws_cli apigatewayv2 create-stage \
@@ -169,6 +195,9 @@ main() {
   echo "GET   $URL_BASE/catalog/api/games"
   echo "GET   $URL_BASE/catalog/api/promotions"
   echo "POST  $URL_BASE/catalog/api/gamepurchase"
+  echo ""
+  echo "GET   $URL_BASE/reviews/api/reviews"
+  echo "POST  $URL_BASE/reviews/api/reviews"
 }
 
 main "$@"
