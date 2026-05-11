@@ -31,6 +31,8 @@ RABBITMQ_PASSWORD="${RABBITMQ_PASSWORD:-}"
 MONGO_ROOT_USER="${MONGO_ROOT_USER:-}"
 MONGO_ROOT_PASS="${MONGO_ROOT_PASS:-}"
 
+REDIS_PASSWORD="${REDIS_PASSWORD:-}"
+
 log() {
   echo ""
   echo "==> $1"
@@ -526,6 +528,80 @@ YAML
   log "MongoDB provisionado com sucesso."
 }
 
+deploy_redis() {
+  log "Provisionando Redis..."
+
+  if [ -z "${REDIS_PASSWORD:-}" ]; then
+    fail "Defina REDIS_PASSWORD no arquivo .env"
+  fi
+
+  kubectl create secret generic redis-secret \
+    --namespace=fcg \
+    --from-literal=password="${REDIS_PASSWORD}" \
+    --from-literal=connectionstring="fcg-redis.fcg.svc.cluster.local:6379,password=${REDIS_PASSWORD}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+
+  kubectl apply -f - <<YAML
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fcg-redis
+  namespace: fcg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fcg-redis
+  template:
+    metadata:
+      labels:
+        app: fcg-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          command: ["redis-server", "--requirepass", "\$(REDIS_PASSWORD)"]
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: password
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          emptyDir: {}
+YAML
+
+  kubectl apply -f - <<YAML
+apiVersion: v1
+kind: Service
+metadata:
+  name: fcg-redis
+  namespace: fcg
+spec:
+  selector:
+    app: fcg-redis
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+YAML
+
+  log "Redis provisionado com sucesso."
+}
+
 main() {
   export AWS_PAGER=""
 
@@ -553,6 +629,7 @@ main() {
   deploy_elasticsearch
   deploy_cloudwatch_agent
   deploy_mongodb
+  deploy_redis
 
   log "Provisionamento do EKS concluído com sucesso."
 }
