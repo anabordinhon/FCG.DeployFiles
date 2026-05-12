@@ -538,7 +538,6 @@ deploy_redis() {
   kubectl create secret generic redis-secret \
     --namespace=fcg \
     --from-literal=password="${REDIS_PASSWORD}" \
-    --from-literal=connectionstring="fcg-redis.fcg.svc.cluster.local:6379,password=${REDIS_PASSWORD}" \
     --dry-run=client -o yaml | kubectl apply -f -
 
   kubectl apply -f - <<YAML
