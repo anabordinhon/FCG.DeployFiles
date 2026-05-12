@@ -265,6 +265,43 @@
           "response": []
         },
         {
+          "name": "Buscar Games no Elastic",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/catalog/api/games/search?q=skyline&page=1&pageSize=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "catalog",
+                "api",
+                "games",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "skyline"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Criar Game",
           "request": {
             "auth": {
@@ -436,6 +473,37 @@
                 "catalog",
                 "api",
                 "gamepurchase"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Preencher Top 20 Redis",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/catalog/api/gamepurchase/top-sellers/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "catalog",
+                "api",
+                "gamepurchase",
+                "top-sellers",
+                "refresh"
               ]
             }
           },
