@@ -561,7 +561,7 @@ spec:
           image: redis:7-alpine
           ports:
             - containerPort: 6379
-          command: ["redis-server", "--requirepass", "\$(REDIS_PASSWORD)"]
+          command: ["sh", "-c", "redis-server --requirepass \"$REDIS_PASSWORD\""]
           env:
             - name: REDIS_PASSWORD
               valueFrom:
